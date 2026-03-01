@@ -26,9 +26,8 @@
     },
     "filter": {
         "min_score": 60,
-        "max_daily_push": 20,
         "hot_threshold": 90,
-        "context_days": 3,
+        "context_days": 2,
         "keep_days": 7
     },
     "schedule": {
