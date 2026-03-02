@@ -32,11 +32,11 @@
     },
     "push": {
         "discord": {
-            "enabled": true,
+            "enabled": false,
             "apiKeyName": "DISCORD_WEBHOOK_URL"
         },
         "feishu": {
-            "enabled": false,
+            "enabled": true,
             "apiKeyName": "FEISHU_WEBHOOK_URL"
         }
     },

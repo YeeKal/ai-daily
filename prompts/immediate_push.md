@@ -43,7 +43,7 @@
 
 严格按照以下 Markdown 格式输出（不要输出任何铺垫语）：
 
-# 🚨 AI 快讯 | {date:YYYY-MM-DD}
+# 🚨 AI Daily 快讯 | {date:YYYY-MM-DD}
 
 ## 🔥 [用一句话总结最核心的事件标题]
 **来源**: Google (source / 主要信息源名称 )

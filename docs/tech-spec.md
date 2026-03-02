@@ -284,7 +284,7 @@ daily-news/
 | 文件 | 类型 | 说明 |
 |------|------|------|
 | `tests/fetch_news.py` |  RSS抓取测试 | 根据时间抓取过去一定时间内的信息，并存放到 tests/news-data 文件夹内 |
-| `tests/push_news.py` |   依赖fetch_news.py。 根据抓取的信息源测试推送功能是否正常 |
+| `tests/push_news.py` | 推送测试 | 支持 --fake (默认从fetch数据)、--real (从push文件发送) 两种模式 |
 | `tests/test_push_loop.py` |  push循环时间逻辑（约90秒） |测试push循环时间逻辑 应在运行时刻接下来的30s和90s各调用一次push |
 | `tests/run_llm_test.py` |  LLM综合测试 | 依赖fetch_news.py。 根据抓取的信息源，测试llm打分/推送等功能是否正常|
 | `tests/test_fetch_lookback.py` | fetch_lookback_minutes功能测试 | 测试 cutoff 时间计算、阈值逻辑、跨天边界去重 |
@@ -312,8 +312,11 @@ python tests/fetch_news.py --max-per-domain 10
 #### 2. push_news.py - 推送测试
 
 ```bash
-# 测试推送到Discord
+# 默认模式：从 fetch 数据读取发送
 python tests/push_news.py
+
+# 模拟真实推送：从 news-data/push-*.md 最新文件发送
+python tests/push_news.py --real
 ```
 
 #### 3. test_push_loop.py - push循环时间逻辑

@@ -1,6 +1,6 @@
 # AI Daily 每日资讯推送系统
 
-AI 驱动的 RSS 新闻聚合与推送系统，支持 400+ 信息源，使用 LLM 智能评分筛选，定时推送到 Discord/飞书。
+AI 驱动的 RSS 新闻聚合与推送系统，支持 400+ 信息源，使用 LLM 智能评分筛选，推送到 Discord/飞书。热门消息实时推送，每日消息定时推送
 
 ## 项目概述
 
@@ -249,8 +249,11 @@ python tests/fetch_news.py --output-dir my-data
 ### 2. push_news.py —— 推送测试
 
 ```bash
-# 测试推送到 Discord
+# 默认模式：从 fetch 数据读取发送
 python tests/push_news.py
+
+# 模拟真实推送：从 news-data/push-*.md 最新文件发送
+python tests/push_news.py --real
 ```
 
 ### 3. test_push_loop.py —— 推送时间逻辑测试

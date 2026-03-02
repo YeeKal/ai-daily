@@ -27,9 +27,8 @@
 
 **2026-03-02**
 - 修复RSS延迟漏读问题：新增 fetch_lookback_minutes 参数，fetch时读取过去更长一段时间的RSS条目进行去重
-- 新增 load_existing_links 跨天边界逻辑：当天时间未超过 threshold 时同时加载昨天文件
+- 新增飞书 Webhook 推送支持：使用卡片消息格式，支持 Markdown 渲染
 - 新增测试脚本 test_fetch_lookback.py
-- 新增飞书 Webhook 推送支持：添加 feishu.py 平台类，删除企业微信相关代码
 - 更新 cleanup_old_files 函数支持 notify 文件清理
 
 **2026-03-01**
