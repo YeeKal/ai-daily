@@ -75,19 +75,21 @@ def _build_batch_prompt(entries: List[Dict], prompt_path: str = None) -> str:
     # 构建entries JSON列表（只包含必要字段）
     entries_for_llm = []
     for e in entries:
-        entries_for_llm.append({
-            "link": e.get("link", ""),
-            "title": e.get("title", "无标题"),
-            "source": e.get("source", "未知来源"),
-            "published": e.get("published", ""),
-            "content": e.get("content", "")[:2000]  # 限制内容长度
-        })
+        entries_for_llm.append(
+            {
+                "link": e.get("link", ""),
+                "title": e.get("title", "无标题"),
+                "source": e.get("source", "未知来源"),
+                "published": e.get("published", ""),
+                "content": e.get("content", "")[:2000],  # 限制内容长度
+            }
+        )
 
     entries_json = json.dumps(entries_for_llm, ensure_ascii=False, indent=2)
 
     # 从文件加载提示词模板，如果未指定则使用默认路径
     if prompt_path is None:
-        prompt_path = "prompts/score_batch.txt"
+        prompt_path = "prompts/score_batch.md"
 
     return load_prompt(prompt_path, entries_json=entries_json)
 
@@ -97,29 +99,31 @@ def _parse_llm_json_response(response: str) -> List[Dict]:
     text = response.strip()
 
     # 尝试去除markdown代码块
-    if text.startswith('```json'):
+    if text.startswith("```json"):
         text = text[7:]
-    elif text.startswith('```'):
+    elif text.startswith("```"):
         text = text[3:]
 
-    if text.endswith('```'):
+    if text.endswith("```"):
         text = text[:-3]
 
     text = text.strip()
 
     # 尝试查找JSON数组
-    if text.startswith('[') and text.endswith(']'):
+    if text.startswith("[") and text.endswith("]"):
         return json.loads(text)
 
     # 尝试从文本中提取JSON数组
-    match = re.search(r'\[.*\]', text, re.DOTALL)
+    match = re.search(r"\[.*\]", text, re.DOTALL)
     if match:
         return json.loads(match.group())
 
     raise ValueError(f"无法从响应中解析JSON: {response[:200]}...")
 
 
-def _split_entries_for_batch(entries: List[Dict], max_prompt_chars: int = 10000) -> List[List[Dict]]:
+def _split_entries_for_batch(
+    entries: List[Dict], max_prompt_chars: int = 10000
+) -> List[List[Dict]]:
     """将entries分成多个批次，每批不超过max_prompt_chars字符"""
     if not entries:
         return []
@@ -133,13 +137,18 @@ def _split_entries_for_batch(entries: List[Dict], max_prompt_chars: int = 10000)
 
     for entry in entries:
         # 估算该entry在JSON中的字符数
-        entry_chars = len(json.dumps({
-            "link": entry.get("link", ""),
-            "title": entry.get("title", "")[:100],
-            "source": entry.get("source", ""),
-            "published": entry.get("published", ""),
-            "content": entry.get("content", "")[:2000]
-        }, ensure_ascii=False))
+        entry_chars = len(
+            json.dumps(
+                {
+                    "link": entry.get("link", ""),
+                    "title": entry.get("title", "")[:100],
+                    "source": entry.get("source", ""),
+                    "published": entry.get("published", ""),
+                    "content": entry.get("content", "")[:2000],
+                },
+                ensure_ascii=False,
+            )
+        )
 
         # 如果当前批次加上这个entry会超出限制，且当前批次不为空，则创建新批次
         if current_chars + entry_chars + overhead > max_prompt_chars and current_batch:
@@ -160,7 +169,7 @@ def _split_entries_for_batch(entries: List[Dict], max_prompt_chars: int = 10000)
 async def _score_single_batch(entries: List[Dict], config: Dict) -> List[Dict]:
     """对单批entries进行评分"""
     # 从config获取批量评分提示词路径
-    prompt_path = config.get("prompts", {}).get("score_batch", "prompts/score_batch.txt")
+    prompt_path = config.get("prompts", {}).get("score_batch", "prompts/score_batch.md")
     prompt = _build_batch_prompt(entries, prompt_path)
 
     try:
@@ -183,7 +192,9 @@ async def _score_single_batch(entries: List[Dict], config: Dict) -> List[Dict]:
                 "link": e.get("link", ""),
                 "tags": [],
                 "score": 50,
-                "summary": e.get("content", "")[:100] + "..." if e.get("content") else ""
+                "summary": e.get("content", "")[:100] + "..."
+                if e.get("content")
+                else "",
             }
             for e in entries
         ]
@@ -242,22 +253,35 @@ def _merge_scores(entries: List[Dict], scores: List[Dict]) -> List[Dict]:
         link = entry.get("link")
         score_data = score_map.get(link, {})
 
-        merged.append({
-            **entry,
-            "tags": score_data.get("tags", entry.get("tags", [])),
-            "score": score_data.get("score", entry.get("score")),
-            "summary": score_data.get("summary", entry.get("summary", ""))
-        })
+        # 确保 score 为整数类型
+        score_value = score_data.get("score", entry.get("score"))
+        if isinstance(score_value, str):
+            try:
+                score_value = int(score_value)
+            except (ValueError, TypeError):
+                score_value = 0
+
+        merged.append(
+            {
+                **entry,
+                "tags": score_data.get("tags", entry.get("tags", [])),
+                "score": score_value,
+                "summary": score_data.get("summary", entry.get("summary", "")),
+            }
+        )
 
     return merged
 
 
-async def generate_immediate_push(entries: List[Dict], config: Dict) -> str:
+async def generate_immediate_push(
+    entries: List[Dict], config: Dict, recent_push_context: str = ""
+) -> str:
     """生成即时推送内容
 
     Args:
         entries: 原始entries列表（调用方已筛选好高分条目）
         config: LLM配置
+        recent_push_context: 近期推送上下文，用于去重
     """
     prompt_path = config.get("prompts", {}).get(
         "immediate_push", "prompts/immediate_push.txt"
@@ -268,6 +292,7 @@ async def generate_immediate_push(entries: List[Dict], config: Dict) -> str:
         prompt_path,
         count=len(entries),
         entries=json.dumps(entries, ensure_ascii=False, indent=2),
+        recent_push_context=recent_push_context,
     )
 
     try:
@@ -284,39 +309,44 @@ async def generate_immediate_push(entries: List[Dict], config: Dict) -> str:
         return "\n".join(lines)
 
 
-async def compose_digest(entries: List[Dict], context: List[Dict], config: Dict) -> str:
-    """生成定时汇总推送内容"""
-    prompt_path = config.get("prompts", {}).get("digest", "prompts/digest.txt")
+async def compose_digest(
+    entries: List[Dict],
+    context: List[Dict],
+    config: Dict,
+    recent_push_context: str = "",
+) -> str:
+    """生成定时汇总推送内容
 
-    entries_text = []
-    for e in entries:
-        entries_text.append(
-            f"[评分: {e.get('score', 0)}] {e['title']}\n"
-            f"来源: {e['source']}\n"
-            f"摘要: {e.get('summary', '')}\n"
-            f"链接: {e['link']}"
-        )
+    Args:
+        entries: 原始entries列表
+        context: 历史碎片化信息（用于去重参考），只保留 title, published, tags, summary, source
+        config: LLM配置
+        recent_push_context: 近期汇总推送上下文，用于去重
+    """
+    prompt_path = config.get("prompts", {}).get("digest", "prompts/digest.md")
 
+    # context 只保留必要字段，拼接成字符串
     context_text = []
     for c in context:
-        context_text.append(f"- [{c.get('score', 0)}分] {c.get('title', '')}")
+        tags_str = ", ".join(c.get("tags", [])) if c.get("tags") else ""
+        context_text.append(
+            f"[score: {c.get('score', 0)}] title:{c.get('title', '')}\n"
+            f"published: {c.get('published', '')}\n"
+            f"tags: {tags_str}\n"
+            f"source: {c.get('source', '')}\n"
+            f"summary: {c.get('summary', '')}"
+        )
 
     prompt = load_prompt(
         prompt_path,
         count=len(entries),
-        entries="\n\n".join(entries_text),
-        context="\n".join(context_text),
+        entries=json.dumps(entries, ensure_ascii=False, indent=2),
+        context="\n\n".join(context_text),
+        recent_push_context=recent_push_context,
         date=datetime.now().strftime("%Y-%m-%d"),
     )
 
     try:
         return await call_llm(prompt, config)
-    except Exception as e:
-        print(f"⚠️ 生成汇总推送失败: {e}")
-        lines = [f"# 📰 AI资讯 | {datetime.now().strftime('%Y-%m-%d')}", ""]
-        for e in sorted(entries, key=lambda x: x.get("score", 0), reverse=True)[:10]:
-            lines.append(f"### [{e['title']}]({e['link']})")
-            lines.append(f"**来源**: {e['source']} | **评分**: {e.get('score', 0)}")
-            lines.append(f"{e.get('summary', '')}")
-            lines.append("")
-        return "\n".join(lines)
+    except Exception:
+        raise

@@ -26,9 +26,13 @@ from src.storage import (
     extract_push_time,
     get_fetch_file,
     get_last_push_file,
+    get_notify_file,
     get_push_file,
     load_existing_links,
+    load_recent_notify_content,
+    load_recent_push_content,
     read_entries,
+    save_notify_file,
     save_push_file,
 )
 
@@ -120,9 +124,7 @@ def collect_entries_for_push(
             to_push.append(entry)
         else:
             # 上下文条目只保留必要字段
-            context.append(
-                {"title": entry.get("title", ""), "score": entry.get("score", 0)}
-            )
+            context.append(entry)
 
     # 上下文按分数排序，取前50
     context = sorted(context, key=lambda x: x.get("score", 0), reverse=True)[:50]
@@ -201,11 +203,30 @@ async def run_fetch_job(config: Dict):
     print(f"💾 已保存到 {fetch_file}")
 
     hot_threshold = config["filter"]["hot_threshold"]
+    no_content_marker = config["filter"].get("no_content_marker", "[NO_NEW_CONTENT]")
     hot_entries = [e for e in scored if e.get("score", 0) >= hot_threshold]
     if hot_entries:
         print(f"🔥 发现 {len(hot_entries)} 条热点消息，即时推送...")
-        push_content = await generate_immediate_push(hot_entries, config["llm"])
-        await send_to_platforms(push_content, config["push"])
+
+        # 加载近期推送上下文用于去重
+        context_days = config["filter"]["context_days"]
+        recent_notify = load_recent_notify_content(context_days)
+        recent_push = load_recent_push_content(context_days)
+        recent_context = f"=== 近期即时推送 ===\n{recent_notify}\n\n=== 近期汇总推送 ===\n{recent_push}"
+
+        push_content = await generate_immediate_push(
+            hot_entries, config["llm"], recent_push_context=recent_context
+        )
+
+        # 检查是否有实际内容需要推送
+        if no_content_marker in push_content:
+            print(f"ℹ️ 无新内容需要推送 (LLM判定为重复内容)")
+        else:
+            await send_to_platforms(push_content, config["push"])
+            # 保存即时推送内容到notify文件
+            notify_file = get_notify_file()
+            save_notify_file(notify_file, push_content)
+            print(f"💾 已保存即时推送到 {notify_file}")
 
     print(f"✅ Fetch Job 完成 | 新消息: {len(scored)} 条 | 热点: {len(hot_entries)} 条")
 
@@ -225,6 +246,7 @@ async def run_push_job(config: Dict):
     min_score = config["filter"]["min_score"]
     context_days = config["filter"]["context_days"]
 
+    # 已经根据min_score 去除得分较低的数据
     to_push, context = collect_entries_for_push(
         last_push_time=last_push_time,
         context_days=context_days,
@@ -242,8 +264,18 @@ async def run_push_job(config: Dict):
 
     print(f"✅ 符合推送标准(≥{min_score}分): {len(to_push)} 条")
 
+    # 加载近期推送上下文用于去重
+    push_context_days = config["filter"].get("push_context_days", 5)
+    recent_push_context_str = load_recent_push_content(push_context_days)
+
     print("🤖 生成推送内容...")
-    push_content = await compose_digest(to_push, context, config["llm"])
+    try:
+        push_content = await compose_digest(
+            to_push, context, config["llm"], recent_push_context=recent_push_context_str
+        )
+    except Exception as e:
+        print(f"生成汇总推送失败: {e}")
+        return
 
     await send_to_platforms(push_content, config["push"])
 

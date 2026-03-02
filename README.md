@@ -106,10 +106,11 @@ python -m src.main
     // 内容过滤
     "filter": {
         "min_score": 60,  // 最低评分阈值，低于此分不推送
-        "max_daily_push": 20,  // 每日推送上限
         "hot_threshold": 90,  // 热点阈值，达到立即即时推送
         "context_days": 3,  // 汇总时参考的历史天数
-        "keep_days": 7  // 数据保留天数
+        "keep_days": 7,  // 数据保留天数
+        "push_context_days": 5,  // 汇总推送去重的上下文有效天数
+        "no_content_marker": "[NO_NEW_CONTENT]"  // LLM返回的无内容标记，用于判断是否跳过推送
     },
 
     // 调度配置
@@ -172,6 +173,8 @@ python -m src.main
 | `hot_threshold` | number | 热点阈值，达到此分数立即触发即时推送（默认90） |
 | `context_days` | number | 上下文天数，汇总推送时参考的历史天数（默认3天） |
 | `keep_days` | number | 数据保留天数，超过天数的 JSON 文件会被清理 |
+| `push_context_days` | number | 汇总推送去重的上下文有效天数（默认5天） |
+| `no_content_marker` | string | LLM 返回的无内容标记，当推送内容包含此字符串时跳过推送（默认"[NO_NEW_CONTENT]"） |
 
 ### schedule —— 调度配置
 
@@ -341,35 +344,27 @@ pytest tests/pytest/test_llm.py -v
 ### Q2: LLM API 配额不足怎么办？
 
 - 降低 `fetch_interval_minutes`（如改为 60 分钟）减少调用频率
-- 调高 `min_score`（如改为 80）减少评分条目数
-- 使用更便宜的模型（如 `google/gemini-2.0-flash-001`）
 
-### Q3: 抓取速度太慢怎么办？
-
-调整 `fetch` 配置：
-
-```json
-"fetch": {
-    "max_workers": 20,  // 增加并发数
-    "timeout": 15       // 增加超时时间
-}
-```
-
-### Q4: 如何查看抓取了多少条数据？
+### Q3: 如何查看抓取了多少条数据？
 
 查看 `news-data/fetch-YYYY-MM-DD.json` 文件，每条记录的 `score` 字段即为 LLM 评分。
 
-### Q5: 即时推送没有触发？
+### Q4: 即时推送没有触发？
 
 检查：
 1. `hot_threshold` 设置是否合理（默认90分较高）
 2. 查看日志中是否有 "🔥 发现 X 条热点消息，即时推送" 输出
 
-### Q6: 定时推送没有收到？
+### Q5: 定时推送没有收到？
 
 - 检查 `push_cron` 表达式是否正确
 - 确认 `timezone_hours` 与你所在时区一致
 - 查看日志中是否有 "✅ Push Job 完成" 输出
+- 检查 `push` 配置是否正确
+
+### Q6: 如何查看推送了多少条数据？
+
+查看 `news-data/push-YYYY-MM-DD.json` 文件
 
 ---
 

@@ -1,9 +1,11 @@
 """数据存储模块 - JSON文件读写"""
+
 import json
 import re
-from datetime import datetime, date, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Dict, List, Optional
+
 import yaml
 
 from src.config import get_timezone
@@ -22,6 +24,102 @@ def get_push_file(push_time: datetime = None, data_dir: str = "news-data") -> st
         push_time = datetime.now()
     time_str = push_time.strftime("%Y-%m-%d-%H-%M-%S")
     return f"{data_dir}/push-{time_str}.md"
+
+
+def get_notify_file(d: date = None, data_dir: str = "news-data") -> str:
+    """获取notify文件路径 (使用配置时区)"""
+    if d is None:
+        d = datetime.now(get_timezone()).date()
+    return f"{data_dir}/notify-{d.isoformat()}.md"
+
+
+def save_notify_file(filepath: str, content: str):
+    """保存即时推送文件（Markdown格式），同一天的内容追加到同一文件"""
+    path = Path(filepath)
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    notify_time = datetime.now(get_timezone()).isoformat()
+
+    new_content = f"""---
+pushTime: "{notify_time}"
+---
+
+{content}
+
+------
+"""
+
+    with open(path, "a", encoding="utf-8") as f:
+        f.write(new_content)
+
+
+def load_recent_notify_content(
+    context_days: int = 3, data_dir: str = "news-data"
+) -> str:
+    """加载最近context_days天的所有notify文件内容"""
+    data_path = Path(data_dir)
+    if not data_path.exists():
+        return ""
+
+    tz = get_timezone()
+    today = datetime.now(tz).date()
+
+    contents = []
+    loaded_files = []
+    for i in range(context_days):
+        d = today - timedelta(days=i)
+        notify_file = data_path / f"notify-{d.isoformat()}.md"
+        if notify_file.exists():
+            try:
+                if notify_file.stat().st_size == 0:
+                    print(f"   ⚠️ 跳过空文件: {notify_file.name}")
+                    continue
+                with open(notify_file, "r", encoding="utf-8") as f:
+                    contents.append(f.read())
+                    loaded_files.append(notify_file.name)
+            except Exception:
+                continue
+
+    if loaded_files:
+        print(
+            f"   📂 已加载 {len(loaded_files)} 个 notify 文件: {', '.join(loaded_files)}"
+        )
+
+    return "\n\n".join(contents)
+
+
+def load_recent_push_content(context_days: int = 3, data_dir: str = "news-data") -> str:
+    """加载最近context_days天的所有push文件内容"""
+    data_path = Path(data_dir)
+    if not data_path.exists():
+        return ""
+
+    tz = get_timezone()
+    today = datetime.now(tz).date()
+
+    contents = []
+    loaded_files = []
+    for i in range(context_days):
+        d = today - timedelta(days=i)
+        pattern = f"push-{d.isoformat()}-*.md"
+        for push_file in sorted(data_path.glob(pattern)):
+            try:
+                if push_file.stat().st_size == 0:
+                    print(f"   ⚠️ 跳过空文件: {push_file.name}")
+                    continue
+                with open(push_file, "r", encoding="utf-8") as f:
+                    content = f.read()
+                    contents.append(content)
+                    loaded_files.append(push_file.name)
+            except Exception:
+                continue
+
+    if loaded_files:
+        print(
+            f"   📂 已加载 {len(loaded_files)} 个 push 文件: {', '.join(loaded_files)}"
+        )
+
+    return "\n\n".join(contents)
 
 
 def get_last_push_file(data_dir: str = "news-data") -> Optional[str]:
@@ -63,6 +161,10 @@ def read_fetch_data(filepath: str) -> Dict:
     if not path.exists():
         return {"meta": {}, "entries": []}
 
+    # 检查文件是否为空
+    if path.stat().st_size == 0:
+        return {"meta": {}, "entries": []}
+
     with open(path, "r", encoding="utf-8") as f:
         return json.load(f)
 
@@ -72,10 +174,7 @@ def save_fetch_file(filepath: str, meta: Dict, entries: List[Dict]):
     path = Path(filepath)
     path.parent.mkdir(parents=True, exist_ok=True)
 
-    data = {
-        "meta": meta,
-        "entries": entries
-    }
+    data = {"meta": meta, "entries": entries}
 
     with open(path, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
@@ -114,19 +213,19 @@ def format_entry(entry: Dict) -> str:
     score = entry.get("score", "")
     summary = entry.get("summary", "")
 
-    return f"""## {entry['title']}
+    return f"""## {entry["title"]}
 
 ---
-source: {entry['source']}
-link: {entry['link']}
-published: {entry['published']}
-fetched_at: {entry['fetched_at']}
+source: {entry["source"]}
+link: {entry["link"]}
+published: {entry["published"]}
+fetched_at: {entry["fetched_at"]}
 tags: {tags_str}
 score: {score}
 summary: {summary}
 ---
 
-{entry['content']}
+{entry["content"]}
 
 ------
 """
@@ -208,7 +307,7 @@ def load_existing_links(filepath: str) -> set:
         return set()
 
     # 检查是JSON还是旧版Markdown
-    if filepath.endswith('.json'):
+    if filepath.endswith(".json"):
         entries = read_entries(filepath)
         return {e.get("link") for e in entries if e.get("link")}
     else:
@@ -232,11 +331,18 @@ def cleanup_old_files(days: int = 7, data_dir: str = "news-data"):
         for file in data_path.glob(pattern):
             try:
                 # 从文件名提取日期
-                date_str = file.name.replace("fetch-", "").replace("push-", "").replace(".json", "").replace(".md", "")
+                date_str = (
+                    file.name.replace("fetch-", "")
+                    .replace("push-", "")
+                    .replace(".json", "")
+                    .replace(".md", "")
+                )
                 # 处理带时间的文件名 push-YYYY-MM-DD-HH-MM-SS
                 date_parts = date_str.split("-")
                 if len(date_parts) >= 3:
-                    file_date = date(int(date_parts[0]), int(date_parts[1]), int(date_parts[2]))
+                    file_date = date(
+                        int(date_parts[0]), int(date_parts[1]), int(date_parts[2])
+                    )
                     if file_date < cutoff.date():
                         file.unlink()
             except (ValueError, OSError):

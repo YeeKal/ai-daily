@@ -6,6 +6,11 @@
                 "title": "OpenAI News",
                 "xmlUrl": "https://openai.com/news/rss.xml",
                 "category": "AI"
+            },
+            {
+                "title": "Chrome for Developers",
+                "xmlUrl": "https://developer.chrome.com/static/blog/feed.xml",
+                "category": "Chrome"
             }
         ],
         "block": [
@@ -28,11 +33,13 @@
         "min_score": 60,
         "hot_threshold": 90,
         "context_days": 2,
-        "keep_days": 7
+        "keep_days": 7,
+        "push_context_days": 5,
+        "no_content_marker": "[NO_NEW_CONTENT]"
     },
     "schedule": {
         "fetch_interval_minutes": 30,
-        "push_cron": ["0 8 * * *", "0 17 * * *"],
+        "push_cron": ["0 8 * * *", "0 17 * * *", "49 21 * * *"],
         "timezone_hours": 8
     },
     "fetch": {
@@ -47,10 +54,9 @@
         "max_prompt_chars": 128000,
         "max_concurrent_batches": 3,
         "prompts": {
-            "score": "prompts/score.txt",
-            "score_batch": "prompts/score_batch.txt",
-            "immediate_push": "prompts/immediate_push.txt",
-            "digest": "prompts/digest.txt"
+            "score_batch": "prompts/score_batch.md",
+            "immediate_push": "prompts/immediate_push.md",
+            "digest": "prompts/digest.md"
         }
     },
     "push": {
