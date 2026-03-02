@@ -1,16 +1,17 @@
 """推送平台模块"""
+
 from typing import Dict, Optional
 
 from .base import PushPlatform
 from .discord import DiscordPlatform
-from .wecom import WecomPlatform
+from .feishu import FeishuPlatform
 
 
 def create_platform(name: str, config: Dict) -> Optional[PushPlatform]:
     """工厂函数，创建推送平台实例"""
     platforms = {
         "discord": DiscordPlatform,
-        "wecom": WecomPlatform,
+        "feishu": FeishuPlatform,
     }
 
     if name not in platforms:

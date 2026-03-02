@@ -35,9 +35,9 @@
             "enabled": true,
             "apiKeyName": "DISCORD_WEBHOOK_URL"
         },
-        "wecom": {
+        "feishu": {
             "enabled": false,
-            "apiKeyName": "WECOM_KEY"
+            "apiKeyName": "FEISHU_WEBHOOK_URL"
         }
     },
     "sources": {

@@ -190,9 +190,9 @@ JSON 格式:
       "enabled": true,
       "apiKeyName": "DISCORD_WEBHOOK_URL"
     },
-    "wecom": {
+    "feishu": {
       "enabled": false,
-      "apiKeyName": "WECOM_KEY"
+      "apiKeyName": "FEISHU_WEBHOOK_URL"
     }
   }
 }
@@ -215,7 +215,7 @@ JSON 格式:
 |--------|----------|------|
 | LLM API Key | `OPENROUTER_API_KEY` | 在 `llm.apiKeyName` 中指定 |
 | Discord Webhook | `DISCORD_WEBHOOK_URL` | 在 `push.discord.apiKeyName` 中指定 |
-| 企业微信 Key | `WECOM_KEY` | 在 `push.wecom.apiKeyName` 中指定 |
+| 飞书 Webhook | `FEISHU_WEBHOOK_URL` | 在 `push.feishu.apiKeyName` 中指定 |
 
 ## 目录结构
 
@@ -232,7 +232,7 @@ daily-news/
 │       ├── __init__.py
 │       ├── base.py      # 基类
 │       ├── discord.py
-│       └── wecom.py
+│       └── feishu.py
 ├── tests/
 │   ├── conftest.py         # pytest fixtures
 │   ├── test_config.py      # 配置模块测试

@@ -1,13 +1,13 @@
-
 ## TODO
 
 当前待办
-- [ ] 早报内容格式优化：参考appso /xiaohu / ai gap
+- [ ] 早报内容格式优化：参考appso / xiaohu / ai gap
 - [ ] 添加更多信息源，如 TechCrunch、GitHub Trending
+- [ ] x 用户post提取： DAIR.AI
+- [ ] 允许fetch链接中的内容对信息进行扩展
 
 长期待办
 
-- [ ] 允许fetch链接中的内容对信息进行扩展
 - [ ] 增加图片/信息图
 - [ ] 推送到知乎 / 小红书 / 网站
 
@@ -29,6 +29,8 @@
 - 修复RSS延迟漏读问题：新增 fetch_lookback_minutes 参数，fetch时读取过去更长一段时间的RSS条目进行去重
 - 新增 load_existing_links 跨天边界逻辑：当天时间未超过 threshold 时同时加载昨天文件
 - 新增测试脚本 test_fetch_lookback.py
+- 新增飞书 Webhook 推送支持：添加 feishu.py 平台类，删除企业微信相关代码
+- 更新 cleanup_old_files 函数支持 notify 文件清理
 
 **2026-03-01**
 - 优化评分系统：通过更新 score 提示词提升评分质量

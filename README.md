@@ -1,6 +1,6 @@
 # AI Daily 每日资讯推送系统
 
-AI 驱动的 RSS 新闻聚合与推送系统，支持 400+ 信息源，使用 LLM 智能评分筛选，定时推送到 Discord/企业微信。
+AI 驱动的 RSS 新闻聚合与推送系统，支持 400+ 信息源，使用 LLM 智能评分筛选，定时推送到 Discord/飞书。
 
 ## 项目概述
 
@@ -58,8 +58,8 @@ OPENROUTER_API_KEY=your_api_key_here
 # Discord Webhook（即时推送和定时汇总都通过此渠道）
 DISCORD_WEBHOOK_URL=your_webhook_url_here
 
-# 企业微信（待验证）
-# WECOM_KEY=your_wecom_key_here
+# 飞书 Webhook
+FEISHU_WEBHOOK_URL=your_feishu_webhook_url_here
 ```
 
 **获取 Discord Webhook：**
@@ -149,9 +149,9 @@ python -m src.main
             "enabled": true,  // 是否启用
             "apiKeyName": "DISCORD_WEBHOOK_URL"  // Webhook环境变量名
         },
-        "wecom": {
+        "feishu": {
             "enabled": false,
-            "apiKeyName": "WECOM_KEY"
+            "apiKeyName": "FEISHU_WEBHOOK_URL"
         }
     }
 }
@@ -221,8 +221,8 @@ python -m src.main
 |------|------|------|
 | `discord.enabled` | boolean | 是否启用 Discord 推送 |
 | `discord.apiKeyName` | string | Discord Webhook 的环境变量名 |
-| `wecom.enabled` | boolean | 是否启用企业微信推送 |
-| `wecom.apiKeyName` | string | 企业微信 Key 的环境变量名 |
+| `feishu.enabled` | boolean | 是否启用飞书推送 |
+| `feishu.apiKeyName` | string | 飞书 Webhook 的环境变量名 |
 
 ---
 
@@ -470,7 +470,7 @@ daily-news/
 │   └── push/            # 推送平台
 │       ├── base.py      # 基类
 │       ├── discord.py
-│       └── wecom.py
+│       └── feishu.py
 ├── tests/               # 测试脚本
 │   ├── fetch_news.py
 │   ├── push_news.py
