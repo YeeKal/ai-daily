@@ -25,6 +25,10 @@
 
 ## 开发进度
 
+**2026-03-03**
+- 采用 MIT 许可开源项目，添加 LICENSE 和 NOTICE 文件
+- 更新 RSS 源说明，致谢 BestBlogs 项目
+
 **2026-03-02**
 - 修复RSS延迟漏读问题：新增 fetch_lookback_minutes 参数，fetch时读取过去更长一段时间的RSS条目进行去重
 - 新增飞书 Webhook 推送支持：使用卡片消息格式，支持 Markdown 渲染
