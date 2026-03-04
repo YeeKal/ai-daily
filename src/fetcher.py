@@ -97,7 +97,7 @@ async def fetch_single_feed_async(
                     "source": feed_info["title"],
                     "content": content,
                     "tags": [],
-                    "score": None,
+                    "score": 0,
                     "summary": "",
                 }
             )

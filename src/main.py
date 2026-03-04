@@ -103,7 +103,7 @@ def collect_entries_for_push(
     )
 
     # 按 min_score 过滤
-    qualified_entries = [e for e in all_entries if e.get("score", 0) >= min_score]
+    qualified_entries = [e for e in all_entries if (e.get("score") or 0) >= min_score]
     print(f"📋 过滤后条目: {len(qualified_entries)} 条 ")
 
     # 计算推送时间边界：max(last_push_time, now - 24h)
@@ -207,7 +207,7 @@ async def run_fetch_job(config: Dict):
 
     hot_threshold = config["filter"]["hot_threshold"]
     no_content_marker = config["filter"].get("no_content_marker", "[NO_NEW_CONTENT]")
-    hot_entries = [e for e in scored if e.get("score", 0) >= hot_threshold]
+    hot_entries = [e for e in scored if (e.get("score") or 0) >= hot_threshold]
     if hot_entries:
         print(f"🔥 发现 {len(hot_entries)} 条热点消息，即时推送...")
 
