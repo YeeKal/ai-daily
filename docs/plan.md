@@ -26,8 +26,16 @@
 | LLM 评分 | 批量 JSON | 减少 API 调用次数 |
 | 状态追踪 | 文件时间戳 | 无需外部数据库 |
 | RSS延迟防护 | fetch_lookback_minutes | 防止RSS延迟导致漏读 |
+| LLM异常通知 | 调用方统一上报 | 避免批次级刷屏，同时保留关键异常通知 |
 
 ## 开发进度
+
+**2026-03-08**
+- 新增 LLM 异常通知：`compose_digest`、`generate_immediate_push` 与 `score_batch` 的错误会通过现有推送渠道发送简单告警
+- 优化批量评分容错：`score_batch` 在批次返回数量不匹配时会按 `link` 回收可用结果，并聚合错误返回给调用方
+- 移除 `generate_immediate_push` 的 fallback 内容，生成失败时由调用方告警并跳过本次即时推送
+- 新增启动前 LLM 可用性检查：主程序在启动 fetch/push 双循环前先探测 LLM 接口，失败则直接退出
+- 修复 pytest 中遗留的旧推送平台命名问题，将 `wecom` 测试更新为当前 `feishu` 实现
 
 **2026-03-03**
 - 采用 MIT 许可开源项目，添加 LICENSE 和 NOTICE 文件

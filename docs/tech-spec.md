@@ -92,11 +92,17 @@ flowchart LR
 入口与双循环：
 
 ```python
+await check_llm_available(config["llm"])
 await asyncio.gather(
     fetch_loop(config),    # 定时抓取
     push_loop(config)      # cron定时推送
 )
 ```
+
+关键启动流程：
+- 先加载配置
+- 启动前执行一次 LLM 可用性检查
+- 检查失败时直接退出，避免系统带病运行
 
 **collect_entries_for_push()** - 条目收集核心：
 
@@ -159,14 +165,20 @@ headers = {
 批量评分：
 
 ```python
-async def score_batch(entries: List[Dict], config: Dict) -> List[Dict]:
+async def score_batch(entries: List[Dict], config: Dict) -> tuple[List[Dict], List[str]]:
     """
     智能分批评分：
     1. 根据 max_prompt_chars 自动分批
     2. 多批次并行处理（限制并发数）
     3. 通过 link 字段关联结果
+    4. 聚合各批次 LLM 错误并返回给调用方统一上报
     """
 ```
+
+LLM 异常处理：
+- `score_batch()` 会仅保留按 `link` 可匹配的评分结果，并返回聚合错误列表
+- `generate_immediate_push()` 失败时不再生成 fallback 内容，而是返回空内容和错误信息，由调用方决定是否告警与跳过推送
+- `compose_digest()` 失败时由调用方捕获，并通过现有推送渠道发送简单异常通知
 
 ### 5. storage.py
 

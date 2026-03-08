@@ -50,7 +50,7 @@ def sample_config():
                 "enabled": True,
                 "webhook_url": "https://discord.com/api/webhooks/test/abc",
             },
-            "wecom": {"enabled": False, "key": ""},
+            "feishu": {"enabled": False, "apiKeyName": "FEISHU_WEBHOOK_URL"},
         },
     }
 

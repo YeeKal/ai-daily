@@ -17,7 +17,12 @@ from croniter import croniter
 
 from src.config import get_timezone, load_config, merge_sources
 from src.fetcher import fetch_all_feeds
-from src.llm import compose_digest, generate_immediate_push, score_batch
+from src.llm import (
+    check_llm_available,
+    compose_digest,
+    generate_immediate_push,
+    score_batch,
+)
 from src.processor import html_to_markdown
 from src.push import send_to_platforms
 from src.storage import (
@@ -35,6 +40,26 @@ from src.storage import (
     save_notify_file,
     save_push_file,
 )
+
+
+async def notify_llm_errors(stage: str, errors: List[str], config: Dict):
+    """发送简单的 LLM 异常通知"""
+    if not errors:
+        return
+
+    lines = [
+        "## LLM异常",
+        "",
+        f"stage: {stage}",
+        f"time: {now_local(config).strftime('%Y-%m-%d %H:%M:%S')}",
+        "",
+    ]
+    lines.extend(f"- {error}" for error in errors)
+
+    try:
+        await send_to_platforms("\n".join(lines), config["push"])
+    except Exception as e:
+        print(f"⚠️ LLM异常通知发送失败: {e}")
 
 
 def now_local(config: Dict = None) -> datetime:
@@ -183,7 +208,9 @@ async def run_fetch_job(config: Dict):
                 entry["published"].astimezone(get_timezone(config)).isoformat()
             )
 
-    scored = await score_batch(new_entries, config["llm"])
+    scored, score_errors = await score_batch(new_entries, config["llm"])
+    if score_errors:
+        await notify_llm_errors("score_batch", score_errors, config)
 
     is_new_file = not os.path.exists(fetch_file)
     if is_new_file:
@@ -217,9 +244,21 @@ async def run_fetch_job(config: Dict):
         recent_push = load_recent_push_content(context_days)
         recent_context = f"=== 近期即时推送 ===\n{recent_notify}\n\n=== 近期汇总推送 ===\n{recent_push}"
 
-        push_content = await generate_immediate_push(
+        push_content, immediate_push_error = await generate_immediate_push(
             hot_entries, config["llm"], recent_push_context=recent_context
         )
+
+        if immediate_push_error:
+            await notify_llm_errors(
+                "generate_immediate_push", [immediate_push_error], config
+            )
+
+        if not push_content:
+            print("⚠️ 即时推送内容生成失败，跳过本次热点推送")
+            print(
+                f"✅ Fetch Job 完成 | 新消息: {len(scored)} 条 | 热点: {len(hot_entries)} 条"
+            )
+            return
 
         # 检查是否有实际内容需要推送
         if no_content_marker in push_content:
@@ -278,6 +317,7 @@ async def run_push_job(config: Dict):
         )
     except Exception as e:
         print(f"生成汇总推送失败: {e}")
+        await notify_llm_errors("compose_digest", [str(e)], config)
         return
 
     await send_to_platforms(push_content, config["push"])
@@ -387,6 +427,14 @@ async def main():
         print("✅ 配置加载成功")
     except Exception as e:
         print(f"❌ 加载配置失败: {e}")
+        return
+
+    print("🔍 检查LLM接口可用性...")
+    try:
+        await check_llm_available(config["llm"])
+        print("✅ LLM接口可用")
+    except Exception as e:
+        print(f"❌ LLM接口不可用: {e}")
         return
 
     await asyncio.gather(fetch_loop(config), push_loop(config))

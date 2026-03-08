@@ -6,7 +6,7 @@ import os
 import re
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Tuple
 
 
 def load_prompt(prompt_path: str, **kwargs) -> str:
@@ -70,6 +70,26 @@ async def call_llm(prompt: str, config: Dict) -> str:
             return data["choices"][0]["message"]["content"]
 
 
+async def check_llm_available(config: Dict, timeout_seconds: int = 15) -> str:
+    """启动时检查 LLM 接口可用性"""
+    prompt = "Reply with OK only."
+
+    try:
+        response = await asyncio.wait_for(
+            call_llm(prompt, config), timeout=timeout_seconds
+        )
+    except asyncio.TimeoutError as exc:
+        raise RuntimeError(f"LLM可用性检查超时({timeout_seconds}s)") from exc
+    except Exception as exc:
+        raise RuntimeError(f"LLM可用性检查失败: {exc}") from exc
+
+    response_text = response.strip()
+    if not response_text:
+        raise RuntimeError("LLM可用性检查返回空响应")
+
+    return response_text
+
+
 def _build_batch_prompt(entries: List[Dict], prompt_path: str = None) -> str:
     """构建批量评分prompt"""
     # 构建entries JSON列表（只包含必要字段）
@@ -111,12 +131,20 @@ def _parse_llm_json_response(response: str) -> List[Dict]:
 
     # 尝试查找JSON数组
     if text.startswith("[") and text.endswith("]"):
-        return json.loads(text)
+        try:
+            return json.loads(text)
+        except json.JSONDecodeError:
+            print("⚠️ 直接解析JSON失败，尝试从文本中提取JSON数组")
+            pass
 
     # 尝试从文本中提取JSON数组
     match = re.search(r"\[.*\]", text, re.DOTALL)
     if match:
-        return json.loads(match.group())
+        try:
+            return json.loads(match.group())
+        except json.JSONDecodeError:
+            print("⚠️ 从文本中提取JSON数组失败")
+            pass
 
     raise ValueError(f"无法从响应中解析JSON: {response[:200]}...")
 
@@ -166,7 +194,38 @@ def _split_entries_for_batch(
     return batches
 
 
-async def _score_single_batch(entries: List[Dict], config: Dict) -> List[Dict]:
+def _reconcile_batch_results(
+    entries: List[Dict], results: List[Dict], batch_index: int
+) -> Tuple[List[Dict], List[str]]:
+    """对单批评分结果按 link 过滤，保留可回收结果"""
+    entry_links = {entry.get("link") for entry in entries if entry.get("link")}
+    matched_results = []
+
+    for item in results:
+        if not isinstance(item, dict):
+            continue
+
+        link = item.get("link")
+        if link and link in entry_links:
+            matched_results.append(item)
+
+    errors = []
+    if len(results) != len(entries) or len(matched_results) != len(entries):
+        errors.append(
+            "批次{batch} 评分结果异常: 输入{input_count}, 返回{output_count}, 匹配{matched_count}".format(
+                batch=batch_index + 1,
+                input_count=len(entries),
+                output_count=len(results),
+                matched_count=len(matched_results),
+            )
+        )
+
+    return matched_results, errors
+
+
+async def _score_single_batch(
+    entries: List[Dict], config: Dict, batch_index: int = 0
+) -> Tuple[List[Dict], List[str]]:
     """对单批entries进行评分"""
     # 从config获取批量评分提示词路径
     prompt_path = config.get("prompts", {}).get("score_batch", "prompts/score_batch.md")
@@ -179,28 +238,17 @@ async def _score_single_batch(entries: List[Dict], config: Dict) -> List[Dict]:
         if not isinstance(results, list):
             raise ValueError(f"LLM返回的不是数组: {type(results)}")
 
-        if len(results) != len(entries):
-            raise ValueError(f"返回数量不匹配: 输入{len(entries)}, 返回{len(results)}")
-
-        return results
+        return _reconcile_batch_results(entries, results[:-2], batch_index)
 
     except Exception as e:
-        print(f"⚠️ 批次评分失败: {e}")
-        # 返回默认评分
-        return [
-            {
-                "link": e.get("link", ""),
-                "tags": [],
-                "score": 50,
-                "summary": e.get("content", "")[:100] + "..."
-                if e.get("content")
-                else "",
-            }
-            for e in entries
-        ]
+        error_message = f"批次{batch_index + 1} 评分失败: {e}"
+        print(f"⚠️ {error_message}")
+        return [], [error_message]
 
 
-async def score_batch(entries: List[Dict], config: Dict) -> List[Dict]:
+async def score_batch(
+    entries: List[Dict], config: Dict
+) -> Tuple[List[Dict], List[str]]:
     """
     批量评分 - 智能分批处理
 
@@ -209,7 +257,7 @@ async def score_batch(entries: List[Dict], config: Dict) -> List[Dict]:
     - 大批量：分成多个批次并行处理
     """
     if not entries:
-        return []
+        return [], []
 
     # 获取分批配置
     max_prompt_chars = config.get("max_prompt_chars", 10000)
@@ -221,26 +269,31 @@ async def score_batch(entries: List[Dict], config: Dict) -> List[Dict]:
 
     # 如果只有一批，直接处理
     if len(batches) == 1:
-        scores = await _score_single_batch(batches[0], config)
-        return _merge_scores(entries, scores)
+        scores, errors = await _score_single_batch(batches[0], config, batch_index=0)
+        return _merge_scores(entries, scores), errors
 
     # 多批并行处理（限制并发数）
     semaphore = asyncio.Semaphore(max_concurrent_batches)
 
-    async def score_with_limit(batch):
+    async def score_with_limit(batch_index: int, batch: List[Dict]):
         async with semaphore:
-            return await _score_single_batch(batch, config)
+            return await _score_single_batch(batch, config, batch_index=batch_index)
 
     # 并发处理所有批次
-    batch_tasks = [score_with_limit(batch) for batch in batches]
+    batch_tasks = [
+        score_with_limit(batch_index, batch)
+        for batch_index, batch in enumerate(batches)
+    ]
     batch_results = await asyncio.gather(*batch_tasks)
 
     # 合并所有评分结果
     all_scores = []
-    for scores in batch_results:
+    all_errors = []
+    for scores, errors in batch_results:
         all_scores.extend(scores)
+        all_errors.extend(errors)
 
-    return _merge_scores(entries, all_scores)
+    return _merge_scores(entries, all_scores), all_errors
 
 
 def _merge_scores(entries: List[Dict], scores: List[Dict]) -> List[Dict]:
@@ -275,7 +328,7 @@ def _merge_scores(entries: List[Dict], scores: List[Dict]) -> List[Dict]:
 
 async def generate_immediate_push(
     entries: List[Dict], config: Dict, recent_push_context: str = ""
-) -> str:
+) -> Tuple[str, Optional[str]]:
     """生成即时推送内容
 
     Args:
@@ -296,17 +349,11 @@ async def generate_immediate_push(
     )
 
     try:
-        return await call_llm(prompt, config)
+        return await call_llm(prompt, config), None
     except Exception as e:
-        print(f"⚠️ 生成即时推送失败: {e}")
-        lines = ["🔥 AI 重磅资讯", ""]
-        for e in entries:
-            lines.append(f"### {e['title']}")
-            lines.append(f"**来源**: {e['source']} | **评分**: {e.get('score', 0)}")
-            lines.append(f"{e.get('summary', '')}")
-            lines.append(f"[查看原文]({e['link']})")
-            lines.append("")
-        return "\n".join(lines)
+        error_message = f"生成即时推送失败: {e}"
+        print(f"⚠️ {error_message}")
+        return "", error_message
 
 
 async def compose_digest(

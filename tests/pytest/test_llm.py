@@ -15,7 +15,10 @@ from llm import (
     _split_entries_for_batch,
     _build_batch_prompt,
     _merge_scores,
+    _score_single_batch,
     call_llm,
+    check_llm_available,
+    generate_immediate_push,
     score_batch,
 )
 
@@ -195,13 +198,55 @@ class TestCallLlm:
             await call_llm("Test prompt", config)
 
 
+class TestLlmHealthCheck:
+    """测试LLM可用性检查"""
+
+    @pytest.mark.asyncio
+    async def test_check_llm_available_success(self, sample_config):
+        with patch("llm.call_llm", new_callable=AsyncMock) as mock_call:
+            mock_call.return_value = "OK"
+
+            result = await check_llm_available(sample_config["llm"])
+
+        assert result == "OK"
+
+    @pytest.mark.asyncio
+    async def test_check_llm_available_empty_response(self, sample_config):
+        with patch("llm.call_llm", new_callable=AsyncMock) as mock_call:
+            mock_call.return_value = "   "
+
+            with pytest.raises(RuntimeError, match="返回空响应"):
+                await check_llm_available(sample_config["llm"])
+
+
+class TestImmediatePush:
+    """测试即时推送生成"""
+
+    @pytest.mark.asyncio
+    async def test_generate_immediate_push_failure_returns_error(
+        self, sample_entries, sample_config
+    ):
+        with patch("llm.load_prompt", return_value="prompt"), patch(
+            "llm.call_llm", new_callable=AsyncMock
+        ) as mock_call:
+            mock_call.side_effect = RuntimeError("boom")
+
+            content, error = await generate_immediate_push(
+                sample_entries[:1], sample_config["llm"], recent_push_context=""
+            )
+
+        assert content == ""
+        assert error == "生成即时推送失败: boom"
+
+
 class TestScoreBatch:
     """测试批量评分"""
 
     @pytest.mark.asyncio
     async def test_score_batch_empty(self, sample_config):
-        result = await score_batch([], sample_config["llm"])
+        result, errors = await score_batch([], sample_config["llm"])
         assert result == []
+        assert errors == []
 
     @pytest.mark.asyncio
     async def test_score_batch_single(self, sample_entries, sample_config):
@@ -217,8 +262,48 @@ class TestScoreBatch:
         ]
 
         with patch("llm._score_single_batch", new_callable=AsyncMock) as mock_score:
-            mock_score.return_value = mock_scores
-            result = await score_batch(entries, sample_config["llm"])
+            mock_score.return_value = (mock_scores, [])
+            result, errors = await score_batch(entries, sample_config["llm"])
 
         assert len(result) == 1
         assert result[0]["score"] == 85
+        assert errors == []
+
+    @pytest.mark.asyncio
+    async def test_score_single_batch_failure_returns_empty_results(
+        self, sample_entries, sample_config
+    ):
+        with patch("llm.call_llm", new_callable=AsyncMock) as mock_call:
+            mock_call.side_effect = RuntimeError("boom")
+            results, errors = await _score_single_batch(
+                sample_entries[:2], sample_config["llm"]
+            )
+
+        assert results == []
+        assert errors == ["批次1 评分失败: boom"]
+
+    @pytest.mark.asyncio
+    async def test_score_single_batch_reconcile_partial_results(
+        self, sample_entries, sample_config
+    ):
+        entries = sample_entries[:2]
+        llm_results = [
+            {
+                "link": entries[0]["link"],
+                "score": 91,
+                "tags": ["AI"],
+                "summary": "Matched result",
+            }
+        ]
+
+        with patch("llm.call_llm", new_callable=AsyncMock) as mock_call:
+            mock_call.return_value = json.dumps(llm_results, ensure_ascii=False)
+            results, errors = await _score_single_batch(entries, sample_config["llm"])
+
+        assert len(results) == 1
+        assert results[0]["score"] == 91
+        assert len(errors) == 1
+        assert "评分结果异常" in errors[0]
+        assert "输入2" in errors[0]
+        assert "返回1" in errors[0]
+        assert "匹配1" in errors[0]

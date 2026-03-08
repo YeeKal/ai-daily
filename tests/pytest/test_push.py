@@ -9,7 +9,7 @@ from unittest.mock import patch, AsyncMock, MagicMock
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
 
 from push.discord import DiscordPlatform
-from push.wecom import WecomPlatform
+from push.feishu import FeishuPlatform
 from push import create_platform
 
 
@@ -127,38 +127,38 @@ class TestDiscordPlatform:
             assert result is False
 
 
-class TestWecomPlatform:
-    """测试企业微信推送"""
+class TestFeishuPlatform:
+    """测试飞书推送"""
 
     def test_validate_config_valid(self):
         config = {
             "enabled": True,
-            "apiKeyName": "WECOM_KEY",
+            "apiKeyName": "FEISHU_WEBHOOK_URL",
         }
-        with patch.dict(os.environ, {"WECOM_KEY": "a" * 20}):
-            platform = WecomPlatform(config)
+        with patch.dict(os.environ, {"FEISHU_WEBHOOK_URL": "https://open.feishu.cn/open-apis/bot/v2/hook/test"}):
+            platform = FeishuPlatform(config)
             assert platform.validate_config(config) is True
 
     def test_validate_config_disabled(self):
         config = {
             "enabled": False,
-            "apiKeyName": "WECOM_KEY",
+            "apiKeyName": "FEISHU_WEBHOOK_URL",
         }
-        with patch.dict(os.environ, {"WECOM_KEY": "a" * 20}):
-            platform = WecomPlatform(config)
+        with patch.dict(os.environ, {"FEISHU_WEBHOOK_URL": "https://open.feishu.cn/open-apis/bot/v2/hook/test"}):
+            platform = FeishuPlatform(config)
             assert platform.validate_config(config) is False
 
     def test_validate_config_missing_key(self):
-        config = {"enabled": True, "apiKeyName": "WECOM_KEY"}
-        with patch.dict(os.environ, {"WECOM_KEY": ""}):
-            platform = WecomPlatform(config)
+        config = {"enabled": True, "apiKeyName": "FEISHU_WEBHOOK_URL"}
+        with patch.dict(os.environ, {"FEISHU_WEBHOOK_URL": ""}):
+            platform = FeishuPlatform(config)
             assert platform.validate_config(config) is False
 
-    def test_validate_config_short_key(self):
-        config = {"enabled": True, "apiKeyName": "WECOM_KEY"}
-        with patch.dict(os.environ, {"WECOM_KEY": "short"}):
-            platform = WecomPlatform(config)
-            assert platform.validate_config(config) is False
+    def test_validate_config_any_non_empty_webhook(self):
+        config = {"enabled": True, "apiKeyName": "FEISHU_WEBHOOK_URL"}
+        with patch.dict(os.environ, {"FEISHU_WEBHOOK_URL": "https://open.feishu.cn/open-apis/bot/v2/hook/test"}):
+            platform = FeishuPlatform(config)
+            assert platform.validate_config(config) is True
 
 
 class TestPushFactory:
@@ -185,15 +185,15 @@ class TestPushFactory:
         with pytest.raises(ValueError):
             create_platform("unknown", {})
 
-    def test_create_wecom_platform(self):
+    def test_create_feishu_platform(self):
         config = {
             "enabled": True,
-            "apiKeyName": "WECOM_KEY",
+            "apiKeyName": "FEISHU_WEBHOOK_URL",
         }
-        with patch.dict(os.environ, {"WECOM_KEY": "a" * 20}):
-            platform = create_platform("wecom", config)
+        with patch.dict(os.environ, {"FEISHU_WEBHOOK_URL": "https://open.feishu.cn/open-apis/bot/v2/hook/test"}):
+            platform = create_platform("feishu", config)
             assert platform is not None
-            assert isinstance(platform, WecomPlatform)
+            assert isinstance(platform, FeishuPlatform)
 
     def test_create_discord_platform(self):
         config = {

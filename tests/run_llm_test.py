@@ -90,7 +90,7 @@ def should_run(args, mode: str) -> bool:
     return False
 
 
-async def test_llm():
+async def run_llm_test():
     """主函数"""
     args = parse_args()
 
@@ -164,7 +164,11 @@ async def test_llm():
         print("-" * 60)
 
         try:
-            scored = await score_batch(test_entries, llm_config)
+            scored, score_errors = await score_batch(test_entries, llm_config)
+            if score_errors:
+                print("\n⚠️ 评分存在异常:")
+                for error in score_errors:
+                    print(f"   - {error}")
             print("\n✅ 评分完成!")
 
             # 显示评分结果
@@ -229,9 +233,12 @@ async def test_llm():
 
         try:
             # 传入上下文参数
-            push_content = await generate_immediate_push(
+            push_content, immediate_push_error = await generate_immediate_push(
                 hot_entries, llm_config, recent_push_context=recent_context
             )
+            if immediate_push_error:
+                print(f"\n⚠️ 即时推送生成异常: {immediate_push_error}")
+                push_content = ""
             print(f"\n✅ 推送内容生成完成!")
             print(f"\n📤 推送内容预览:")
             print("-" * 40)
@@ -330,7 +337,7 @@ async def test_llm():
 
 if __name__ == "__main__":
     try:
-        success = asyncio.run(test_llm())
+        success = asyncio.run(run_llm_test())
         sys.exit(0 if success else 1)
     except KeyboardInterrupt:
         print("\n\n👋 已取消")
