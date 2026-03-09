@@ -307,3 +307,24 @@ class TestScoreBatch:
         assert "输入2" in errors[0]
         assert "返回1" in errors[0]
         assert "匹配1" in errors[0]
+
+    @pytest.mark.asyncio
+    async def test_score_single_batch_keeps_full_results(self, sample_entries, sample_config):
+        entries = sample_entries[:3]
+        llm_results = [
+            {
+                "link": entry["link"],
+                "score": 88,
+                "tags": ["AI"],
+                "summary": f"Summary for {index}",
+            }
+            for index, entry in enumerate(entries, start=1)
+        ]
+
+        with patch("llm.call_llm", new_callable=AsyncMock) as mock_call:
+            mock_call.return_value = json.dumps(llm_results, ensure_ascii=False)
+            results, errors = await _score_single_batch(entries, sample_config["llm"])
+
+        assert len(results) == 3
+        assert [result["link"] for result in results] == [entry["link"] for entry in entries]
+        assert errors == []

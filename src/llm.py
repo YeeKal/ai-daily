@@ -238,7 +238,7 @@ async def _score_single_batch(
         if not isinstance(results, list):
             raise ValueError(f"LLM返回的不是数组: {type(results)}")
 
-        return _reconcile_batch_results(entries, results[:-2], batch_index)
+        return _reconcile_batch_results(entries, results, batch_index)
 
     except Exception as e:
         error_message = f"批次{batch_index + 1} 评分失败: {e}"
