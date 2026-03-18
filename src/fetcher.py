@@ -31,6 +31,8 @@ async def fetch_single_feed_async(
     cutoff_time: datetime,
     timeout: int = 5,
     session: aiohttp.ClientSession = None,
+    proxy: str = None,
+    use_proxy: bool = True,
 ) -> List[Dict]:
     """异步获取单个源的条目"""
     entries = []
@@ -49,26 +51,114 @@ async def fetch_single_feed_async(
             "Connection": "keep-alive",
         }
 
-        # 使用 aiohttp 获取 RSS 内容（支持超时）
+        # 优化SSL配置
+        connector = aiohttp.TCPConnector(
+            ssl=False,  # 禁用SSL验证以避免证书问题
+            limit=100,  # 增加连接池大小
+            keepalive_timeout=30
+        )
+        proxy_auth = None
+
+        # 使用 aiohttp 获取 RSS 内容（支持超时和代理）
         if session:
             # 使用传入的 session
-            async with session.get(
-                url, headers=headers, timeout=aiohttp.ClientTimeout(total=timeout)
-            ) as resp:
-                if resp.status != 200:
-                    print(f"⚠️ HTTP {resp.status}: {url}")
+            try:
+                if use_proxy and proxy:
+                    print(f"🔗 使用代理获取: {url}")
+                    async with session.get(
+                        url, 
+                        headers=headers, 
+                        timeout=aiohttp.ClientTimeout(total=timeout),
+                        proxy=proxy,
+                        proxy_auth=proxy_auth
+                    ) as resp:
+                        if resp.status != 200:
+                            print(f"⚠️ HTTP {resp.status}: {url}")
+                            return []
+                        content = await resp.text()
+                else:
+                    print(f"🔗 直接获取: {url}")
+                    async with session.get(
+                        url, 
+                        headers=headers, 
+                        timeout=aiohttp.ClientTimeout(total=timeout)
+                    ) as resp:
+                        if resp.status != 200:
+                            print(f"⚠️ HTTP {resp.status}: {url}")
+                            return []
+                        content = await resp.text()
+            except Exception as e:
+                # 尝试不使用代理
+                print(f"⚠️ 连接失败，尝试备用方式: {url} - {str(e)[:50]}")
+                # 创建新的session，避免使用已关闭的session
+                try:
+                    async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(
+                        ssl=False,  # 禁用SSL验证以避免证书问题
+                        limit=100,  # 增加连接池大小
+                        keepalive_timeout=30
+                    )) as backup_sess:
+                        async with backup_sess.get(
+                            url, 
+                            headers=headers, 
+                            timeout=aiohttp.ClientTimeout(total=timeout)
+                        ) as resp:
+                            if resp.status != 200:
+                                print(f"⚠️ HTTP {resp.status}: {url}")
+                                return []
+                            content = await resp.text()
+                except Exception as e2:
+                    print(f"⚠️ 备用连接也失败: {url} - {str(e2)[:50]}")
                     return []
-                content = await resp.text()
         else:
             # 创建临时 session
-            async with aiohttp.ClientSession() as sess:
-                async with sess.get(
-                    url, headers=headers, timeout=aiohttp.ClientTimeout(total=timeout)
-                ) as resp:
-                    if resp.status != 200:
-                        print(f"⚠️ HTTP {resp.status}: {url}")
-                        return []
-                    content = await resp.text()
+            try:
+                if use_proxy and proxy:
+                    print(f"🔗 使用代理获取: {url}")
+                    async with aiohttp.ClientSession(connector=connector) as sess:
+                        async with sess.get(
+                            url, 
+                            headers=headers, 
+                            timeout=aiohttp.ClientTimeout(total=timeout),
+                            proxy=proxy,
+                            proxy_auth=proxy_auth
+                        ) as resp:
+                            if resp.status != 200:
+                                print(f"⚠️ HTTP {resp.status}: {url}")
+                                return []
+                            content = await resp.text()
+                else:
+                    print(f"🔗 直接获取: {url}")
+                    async with aiohttp.ClientSession(connector=connector) as sess:
+                        async with sess.get(
+                            url, 
+                            headers=headers, 
+                            timeout=aiohttp.ClientTimeout(total=timeout)
+                        ) as resp:
+                            if resp.status != 200:
+                                print(f"⚠️ HTTP {resp.status}: {url}")
+                                return []
+                            content = await resp.text()
+            except Exception as e:
+                # 尝试不使用代理
+                print(f"⚠️ 连接失败，尝试备用方式: {url} - {str(e)[:50]}")
+                try:
+                    async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(
+                        ssl=False,  # 禁用SSL验证以避免证书问题
+                        limit=100,  # 增加连接池大小
+                        keepalive_timeout=30
+                    )) as backup_sess:
+                        async with backup_sess.get(
+                            url, 
+                            headers=headers, 
+                            timeout=aiohttp.ClientTimeout(total=timeout)
+                        ) as resp:
+                            if resp.status != 200:
+                                print(f"⚠️ HTTP {resp.status}: {url}")
+                                return []
+                            content = await resp.text()
+                except Exception as e2:
+                    print(f"⚠️ 备用连接也失败: {url} - {str(e2)[:50]}")
+                    return []
 
         # 使用 feedparser 解析内容
         feed = feedparser.parse(content)
@@ -102,13 +192,21 @@ async def fetch_single_feed_async(
                 }
             )
     except Exception as e:
+        import traceback
         print(f"⚠️ 获取失败 {feed_info['title']}: {e}")
+        # 打印详细错误信息
+        print(f"详细错误: {traceback.format_exc()}")
 
     return entries
 
 
 async def fetch_all_feeds(
-    feeds: List[Dict], cutoff_time: datetime, max_workers: int = 10, timeout: int = None
+    feeds: List[Dict], 
+    cutoff_time: datetime, 
+    max_workers: int = 10, 
+    timeout: int = None,
+    proxy: str = None,
+    use_proxy: bool = True
 ) -> List[Dict]:
     """并发获取所有源的条目"""
     all_entries = []
@@ -122,7 +220,7 @@ async def fetch_all_feeds(
 
     async def fetch_with_limit(feed):
         async with semaphore:
-            return await fetch_single_feed_async(feed, cutoff_time, timeout)
+            return await fetch_single_feed_async(feed, cutoff_time, timeout, proxy=proxy, use_proxy=use_proxy)
 
     # 创建所有任务
     tasks = [fetch_with_limit(feed) for feed in feeds]

@@ -15,7 +15,9 @@
     },
     "fetch": {
         "max_workers": 10,
-        "timeout": 10
+        "timeout": 20,
+        "proxyEnvVar": "HTTP_PROXY",
+        "use_proxy": true
     },
     "llm": {
         "provider": "openai",
