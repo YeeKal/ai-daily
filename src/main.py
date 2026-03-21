@@ -177,8 +177,14 @@ async def run_fetch_job(config: Dict):
 
     max_workers = config.get("fetch", {}).get("max_workers", 20)
     timeout = config.get("fetch", {}).get("timeout", 30)
+    proxy_env_var = config.get("fetch", {}).get("proxyEnvVar", "HTTP_PROXY")
+    proxy = os.environ.get(proxy_env_var, None)
+    use_proxy = config.get("fetch", {}).get("use_proxy", True)
+    print(f"🔧 代理配置: {'使用代理' if use_proxy and proxy else '不使用代理'}")
+    if use_proxy and proxy:
+        print(f"🔧 代理地址: {proxy}")
     entries = await fetch_all_feeds(
-        sources, cutoff, max_workers=max_workers, timeout=timeout
+        sources, cutoff, max_workers=max_workers, timeout=timeout, proxy=proxy, use_proxy=use_proxy
     )
     print(f"📥 抓取到 {len(entries)} 条原始消息")
 

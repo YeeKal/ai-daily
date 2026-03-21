@@ -1,0 +1,14 @@
+[Unit]
+Description=AI Daily News System
+After=network.target
+
+[Service]
+Type=simple
+User=your_username
+WorkingDirectory=/path/to/ai-daily
+ExecStart=/path/to/ai-daily/.venv/bin/python3 -m src.main
+Restart=on-failure
+RestartSec=5s
+
+[Install]
+WantedBy=multi-user.target
